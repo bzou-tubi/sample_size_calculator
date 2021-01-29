@@ -1,6 +1,18 @@
 class metric_switcher(object):
+    """
+    Contains a set of functions that generates the SQL CTE for a chosen metric.
+    """
     
     def generate_user_data_cte(self, metric): # <-- whatever you input here in "metric" will choose one of the CTEs below      
+        """
+        Generates a string SQL CTE based on the metric chosen. 
+        
+        Args: 
+            metric: a string chosen from the list of metrics in possible_metrics()
+
+        Returns:
+            String
+        """
         # Get the method from 'self'. Default to a lambda.
         method = getattr(self, metric, lambda: "Invalid metric")
         # Call the method as we return it
@@ -24,6 +36,7 @@ class metric_switcher(object):
         return metrics
         
     def choose_metric(self, metric):
+        # the most important function in this tool
         return metric
 
     def all_tvt_hours(self):

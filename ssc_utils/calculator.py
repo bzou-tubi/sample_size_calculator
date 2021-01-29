@@ -1,3 +1,7 @@
+# Set of helper functions that do the power tests
+
+# Functions that set default parameters
+
 def effect(x=0.01):
     return x
 
@@ -12,3 +16,4 @@ def power(x=0.8):
 
 def alpha(x=0.05):
     return x
+

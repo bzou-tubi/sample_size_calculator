@@ -1,6 +1,13 @@
 class cuped(object):
 
     def generate_cuped_cte(self):
+        """
+        Generates the SQL CTEs that go through CUPED calculations. Should always be the last CTE in the final SQL string. 
+            
+        Returns:
+            String
+        """
+        
         return """
             -- Cuped values
             , cuped_values_1 AS (
@@ -94,8 +101,6 @@ class cuped(object):
                   ON a.platform = b.platform
                   AND a.metric_name = b.metric_name
             )
-
-
 
             , cuped_results AS (
                 SELECT metric_name,

@@ -1,6 +1,13 @@
 class metric_summary(object):
 
     def generate_metric_summary_cte(self):
+        """
+        Generates the SQL CTE that summarizes the device level metric chosen.
+            
+        Returns:
+            String
+        """
+        
         return """
             , metrics AS (
               SELECT DISTINCT

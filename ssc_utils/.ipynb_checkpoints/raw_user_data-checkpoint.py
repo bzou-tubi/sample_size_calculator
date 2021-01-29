@@ -1,5 +1,13 @@
 class raw_user_data(object):
+    """
+    Generates a catch-all string: SQL CTE that pulls a list of standard metrics of active devices in the last 4 weeks, from device_metric_daily.
 
+    In the future, we may want to improve this to allow flexibility for more complex metrics not available in device_metric_daily
+    ie. verification rates can only be calculated from analytics_richevent using is_confirmed = 't'            
+    
+    Returns:
+        String
+    """
     def generate_raw_user_data_cte(self):
         return """
             , raw_user_data AS (

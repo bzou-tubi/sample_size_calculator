@@ -1,4 +1,8 @@
 class filter_generator(object):
+    """
+    Contains a set of functions that generates the SQL CTEs that go through CUPED calculations. 
+    Should always be the first CTE in the final SQL string.     
+    """
     
     def attribute_conditions_choices(self):
         attribute_conditions = [
@@ -21,7 +25,9 @@ class filter_generator(object):
         return metric_conditions 
 
     def filter_attributes_choices(self):
-        # Possible choices for attribute filtering (from all_metric_hourly): 
+        """
+        List of attributes available for filtering (from all_metric_hourly)
+        """ 
         filter_attributes = [
                 'no filters',
                 'user_id',
@@ -46,7 +52,9 @@ class filter_generator(object):
         return filter_attributes 
 
     def filter_metrics_choices(self):
-    # Possible choices for metric filtering (from all_metric_hourly): 
+        """
+        List of metrics available for filtering (from all_metric_hourly)
+        """         
         filter_metrics = [
             'no filters',
             'tvt_sec',
@@ -100,6 +108,16 @@ class filter_generator(object):
         return filter_metrics 
     
     def base_amh_query(self):
+        """
+        Returns a SQL CTE string, with the last CTE containing a list of device_ids to be joined later.  
+        
+        The resulting string has 4 dynamic inputs that can be specified by the user: 
+            attr_filter
+            metric_filter_where
+            cumul_filter_metric
+            metric_filter_having
+        """
+        
         amh_filter_query = """
         WITH elig_devices as (
             -- Pull list of devices that were active (has any row; don't need TVT >0) in the past 2 weeks
@@ -168,6 +186,20 @@ class filter_generator(object):
     
     
     def make_sql_where_string(self, field, condition, value):
+        """
+        Generates a WHERE/HAVING SQL string with a filtering condition.
+        These inputs will be specified by the user. Should work for both attribute and metric filters.        
+        
+        Args:
+            field: the column name of the attribute/metric the user wants to filter on
+            condition: the filtering condition for the field (ie. <, =, BETWEEN, etc.)
+            value: the value to filter on for the condition 
+        
+        Returns: 
+            SQL string to insert into a "where" or "having" section of a SQL query.
+            For example, this will return something like: "AND tvt_sec > 3600"
+        """
+
         if field == 'no filters': 
             return ''
         else: 
@@ -180,7 +212,21 @@ class filter_generator(object):
     
     
     def set_metric_filter_sql_inputs(self, metric_sql):
-        # initialize sql strings
+        """
+        Generates a 3 element list that categorizes the metric filter inputed into here as a "HAVING" or "WHERE" filter. 
+        This allows us to put the metric filter in the correct place when forming our filter SQL string. 
+        
+        Args:
+            metric_sql: interactive object (user generated)
+        
+        Returns: 
+            A 3-element list with:
+                metric_sql_where: string with full SQL where condition (ie. AND user_id IS NOT NULL)  
+                cumul_metric_str: string field to be used in cumulative filtering (tvt_sec)  
+                metric_sql_having: string with full SQL having condition (ie. AND tvt_sec > 3600)  
+            Any of the elements can be null/empty, if the user does not specify a filter.
+        """
+        
         cumul_metric_str = metric_sql_having = metric_sql_where = ''
 
         if (metric_sql.children[1].value == '<') | (metric_sql.children[1].value == '<=') | (metric_sql.children[1].value == 'BETWEEN'):
@@ -194,8 +240,17 @@ class filter_generator(object):
 
     
     def generate_filter_cte(self, attribute_sql, metric_sql):
-#         base_query = getattr(self, 'base_amh_query')()
-#         base_query_inputs = getattr(self, 'set_metric_filter_sql_inputs')(metric_sql)
+        """
+        Generates a string, containing a set of SQL CTEs that combines all filtering conditions. 
+        The final CTE elig_devices2 should be a list of device_ids eligible under the filtering specifications. 
+        
+        Args:
+            attribute_sql: interactive object (user generated)
+            metric_sql: interactive object (user generated)
+        
+        Returns: 
+            string
+        """
         base_query = self.base_amh_query()
         base_query_inputs = self.set_metric_filter_sql_inputs(metric_sql)
         
