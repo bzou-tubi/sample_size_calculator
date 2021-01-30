@@ -75,11 +75,11 @@ class filter_generator(object):
         
         amh_filter_query = """
         WITH elig_devices as (
-            -- Pull list of devices that were active (has any row; don't need TVT >0) in the past 2 weeks
+            -- Pull list of devices that were active (has any row; don't need TVT >0) in the past 4 weeks
             -- Using all_metric_hourly for additional filters
             SELECT DISTINCT device_id
             FROM tubidw.all_metric_hourly
-            WHERE DATE_TRUNC('week',hs) >= dateadd('week',-2,DATE_TRUNC('week',GETDATE()))
+            WHERE DATE_TRUNC('week',hs) >= dateadd('week',-4,DATE_TRUNC('week',GETDATE()))
             AND DATE_TRUNC('week',hs) < DATE_TRUNC('week',GETDATE())
             {attr_filter} -- attribute filters dynamically populate here
 
