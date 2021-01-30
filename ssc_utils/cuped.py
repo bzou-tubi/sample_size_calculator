@@ -48,7 +48,6 @@ class cuped(object):
                 AVG(metric_covariate) AS covariate_mean,
                 1.0 * SUM((metric_covariate - before_covariate_average)*(metric_result - after_covariate_average)) / NULLIF(STDDEV(metric_covariate)*STDDEV(metric_covariate) * COUNT(*), 0) AS theta
               FROM cuped_values_1
-              WHERE platform_type NOT IN ('WEB')  -- to avoid duplicates with platform
               GROUP BY 1, 2
             )
 

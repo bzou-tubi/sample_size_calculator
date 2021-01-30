@@ -1,9 +1,12 @@
+import tubi_data_runtime as tdr
+import pandas as pd
+
 class filter_generator(object):
     """
     Contains a set of functions that generates the SQL CTEs that go through CUPED calculations. 
     Should always be the first CTE in the final SQL string.     
     """
-    
+
     def attribute_conditions_choices(self):
         attribute_conditions = [
             '=',
@@ -55,56 +58,8 @@ class filter_generator(object):
         """
         List of metrics available for filtering (from all_metric_hourly)
         """         
-        filter_metrics = [
-            'no filters',
-            'tvt_sec',
-            'movie_non_autoplay_tvt_sec',
-            'series_non_autoplay_tvt_sec',
-            'autoplay_tvt_sec',
-            'non_autoplay_tvt_sec',
-            'series_tvt_sec',
-            'movie_tvt_sec',
-            'series_autoplay_tvt_sec',
-            'movie_autoplay_tvt_sec',
-            'visit_total_count',
-            'view_total_count',
-            'autoplay_view_total_count',
-            'non_autoplay_view_total_count',
-            'series_view_total_count',
-            'movie_view_total_count',
-            'autoplay_movie_view_total_count',
-            'autoplay_series_view_total_count',
-            'complete_5p_total_count',
-            'complete_30p_total_count',
-            'complete_70p_total_count',
-            'complete_90p_total_count',
-            'episode_complete_30p_total_count',
-            'episode_complete_70p_total_count',
-            'episode_complete_90p_total_count',
-            'movie_complete_30p_total_count',
-            'movie_complete_70p_total_count',
-            'movie_complete_90p_total_count',
-            'ad_impression_total_count',
-            'ad_break_total_count',
-            'seek_total_count',
-            'pause_total_count',
-            'subtitles_total_count',
-            'search_total_count',
-            'user_signup_count',
-            'device_registration_count',
-            'signup_or_registration_activity_count',
-            'cast_count',
-            'add_to_queue_total_count',
-            'details_page_visit_total_count',
-            'onboarding_page_visit_total_count',
-            'home_page_visit_total_count',
-            'browse_page_visit_total_count',
-            'category_page_visit_total_count',
-            'trailer_start_count',
-            'unattributed_tvt_sec',
-            'linear_tvt_sec',
-            'linear_view_total_count'
-        ]
+        cols = pd.Series(tdr.get_catalog().tubidw.all_metric_hourly.columns)
+        filter_metrics = ['no filters'] + cols[cols.str.endswith(tuple(['_count', '_sec']))].tolist()
         return filter_metrics 
     
     def base_amh_query(self):
@@ -203,7 +158,7 @@ class filter_generator(object):
         if field == 'no filters': 
             return ''
         else: 
-            if (condition == '<') | (condition == '<=') | (condition == 'BETWEEN'):
+            if condition in ('<', '<=', 'BETWEEN'):
             # for < (less than) filters, need to use a "having" filter with an aggregation on the metric
             # for now, the only aggregation is "MAX" but might want to open up to others in the future
                 return 'AND ' + 'MAX(' + field + ')' + ' ' + condition + ' ' + value + ''
@@ -213,7 +168,7 @@ class filter_generator(object):
     
     def set_metric_filter_sql_inputs(self, metric_sql):
         """
-        Generates a 3 element list that categorizes the metric filter inputed into here as a "HAVING" or "WHERE" filter. 
+        Generates a 3-element list that categorizes the metric filter inputed into here as a "HAVING" or "WHERE" filter. 
         This allows us to put the metric filter in the correct place when forming our filter SQL string. 
         
         Args:
@@ -229,7 +184,7 @@ class filter_generator(object):
         
         cumul_metric_str = metric_sql_having = metric_sql_where = ''
 
-        if (metric_sql.children[1].value == '<') | (metric_sql.children[1].value == '<=') | (metric_sql.children[1].value == 'BETWEEN'):
+        if metric_sql.children[1].value in ('<', '<=', 'BETWEEN'):
             cumul_metric_str = metric_sql.children[0].value
             metric_sql_having = metric_sql.result
         else:

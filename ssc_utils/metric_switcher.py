@@ -22,7 +22,6 @@ class metric_switcher(object):
         # Possible metrics to use for MDE (same as current calculator)
         # may want to make this consistent with the primary metrics available in exp dash in the future
         metrics = [
-            'all_tvt_hours',
             'capped_tvt',
             'new_viewer_first_day_capped_tvt',
             'registrations',
@@ -31,7 +30,8 @@ class metric_switcher(object):
             'new_viewer_first_day_conversion',
             'new_user_1_to_8_days_retained',
             'all_user_retained_in_experiment_timeframe',
-            'ad_impressions'
+            'ad_impressions',
+            'all_tvt_hours'
         ]
         return metrics
         
