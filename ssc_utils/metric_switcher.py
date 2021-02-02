@@ -24,7 +24,8 @@ class metric_switcher(object):
         metrics = [
             'capped_tvt',
             'new_viewer_first_day_capped_tvt',
-            'registrations',
+            'signups',
+            'activations', 
             'visits',
             'viewer_conversion',
             'new_viewer_first_day_conversion',
@@ -76,18 +77,30 @@ class metric_switcher(object):
         )
         """
 
-    def registrations(self):
+    def signups(self):
         return """
         , user_data AS (
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'registrations'::text AS metric_name,
+            'signups'::text AS metric_name,
             'SUM'::text AS metric_collection_method, 
-            signup_or_registration_activity_count AS metric_value
+            user_signup_count AS metric_value
           FROM raw_user_data
         )
         """
 
+    def activations(self):
+        return """
+        , user_data AS (
+          SELECT 
+            device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
+            'activations'::text AS metric_name,
+            'SUM'::text AS metric_collection_method, 
+            device_registration_count AS metric_value 
+          FROM raw_user_data
+        )
+        """
+    
     def visits(self):
         return """
         , user_data AS (
@@ -99,7 +112,7 @@ class metric_switcher(object):
           FROM raw_user_data
         )
         """
-
+    
     def viewer_conversion(self):
         return """
         , user_data AS (
@@ -157,7 +170,6 @@ class metric_switcher(object):
             SELECT ds,
                    device_id,
                    device_first_seen_ts,
-                   {{ platform_type('platform') }} AS platform_type,
                    platform,
                    GETDATE() AS last_exposure_ds,
                    DATEADD('week', -2, DATE_TRUNC('week', last_exposure_ds)) AS first_exposure_ds,
@@ -188,8 +200,8 @@ class metric_switcher(object):
         , user_data AS (
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'ad_impressions' AS metric_name,
-            'SUM' AS metric_collection_method,
+            'ad_impressions'::text AS metric_name,
+            'SUM'::text AS metric_collection_method,
             ad_impression_total_count AS metric_value
           FROM device_data_impressions
         )

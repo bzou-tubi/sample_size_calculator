@@ -96,7 +96,7 @@ class filter_generator(object):
         -- TODO: Figure out some way to make this dynamic, based on if cumul_filter_metric is used or not
         , elig_device_metrics as (
             -- For eligible devices, pull their whole history
-            SELECT DISTINCT
+            SELECT 
                 d.device_id,
                 d.device_first_seen_ts,
                 d.device_first_view_ts,
@@ -105,15 +105,18 @@ class filter_generator(object):
                 d.ds,
 
                 -- For filtering devices
-                {cumul_filter_metric} as daily_filter_metric,
+                sum({cumul_filter_metric}) as daily_filter_metric,
 
                 -- For calculating metrics
-                d.tvt_sec,
-                d.signup_or_registration_activity_count,
-                d.visit_total_count
+                sum(d.tvt_sec) as tvt_sec,
+                sum(d.user_signup_count) as user_signup_count,
+                sum(d.device_registration_count) as device_registration_count,
+                sum(d.signup_or_registration_activity_count) as signup_or_registration_activity_count,
+                sum(d.visit_total_count) as visit_total_count
             FROM tubidw.device_metric_daily as d
             JOIN elig_devices as e
                 ON d.device_id = e.device_id
+            GROUP BY 1,2,3,4,5,6
         )
 
         , elig_device_cumul_filter as (
