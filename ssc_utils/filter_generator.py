@@ -159,7 +159,7 @@ class filter_generator(object):
     
     def make_sql_where_string(self, field, condition, value, filter_type = 'attribute'):
         """
-        Generates a WHERE/HAVING SQL string with a filtering condition.
+        Generates a SQL string with a WHERE/HAVING/CASE WHEN conditional.
         These inputs will be specified by the user. Should work for both attribute and metric filters.        
         
         Args:
