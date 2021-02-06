@@ -157,7 +157,7 @@ class filter_generator(object):
         return amh_filter_query
     
     
-    def make_sql_where_string(self, field, condition, value):
+    def make_sql_where_string(self, field, condition, value, filter_type = 'attribute'):
         """
         Generates a WHERE/HAVING SQL string with a filtering condition.
         These inputs will be specified by the user. Should work for both attribute and metric filters.        
@@ -173,12 +173,12 @@ class filter_generator(object):
         """
 
         if field == 'no filters': 
-                return ''
+            return ''
         else: 
             # for < (less than) filters, need to use a "having" filter with an aggregation on the metric
             # for now, the only aggregation is "MAX" but might want to open up to others in the future
 
-            if (condition == 'metric') & (condition in ('<', '<=', 'BETWEEN')):
+            if (filter_type == 'metric') & (condition in ('<', '<=', 'BETWEEN')):
                 return 'MAX(' + field + ')' + ' ' + condition + ' ' + value + ''
             else:
                 return field + ' ' + condition + ' ' + value + ''
