@@ -18,6 +18,7 @@ class filter_generator(object):
             - There is also difficulty in putting the filtering code in the correct place within the SQL
             - For example, for > metric filters, such as "at least 1 hour TVT", we can use the cumulated metric in the "where" clause. 
             - For < metric filters however, we must use a max(cumulated metric) and put the filter in the "having" clause.  
+        - events (ie. event_name = )
     """
 
     def attribute_conditions_choices(self):
@@ -194,10 +195,10 @@ class filter_generator(object):
         
         Returns: 
             A 3-element list with:
-                metric_sql_where: string with full SQL where condition (ie. AND user_id IS NOT NULL)  
-                cumul_metric_str: string field to be used in cumulative filtering (tvt_sec)  
-                metric_sql_having: string with full SQL having condition (ie. AND tvt_sec > 3600)  
-            Any of the elements can be null/empty, if the user does not specify a filter.
+                metric_sql_where: string with full SQL where condition (ie. user_id IS NOT NULL)  
+                cumul_metric_str: string field to be used in cumulative filtering (tvt_sec). Necessary to have this separate so the SQL can pre-cumulate the desired metric.
+                metric_sql_having: string with full SQL having condition (ie. tvt_sec > 3600)  
+            Any of the elements can be null/empty, if the user does not specify a filter. 
         """
         
         cumul_metric_str = metric_sql_having = metric_sql_where = ''
@@ -223,39 +224,16 @@ class filter_generator(object):
         
         Returns: 
             string
+        
+        TODO: MAKE THIS DYNAMIC TO TAKE EITHER AMH OR EVENTS FILTERING
         """
         base_query = self.base_amh_query()
         base_query_inputs = self.set_metric_filter_sql_inputs(metric_sql)
         
-        elig_devices2 = base_query.format(attr_filter = "AND " + attribute_sql.result,
-                                          metric_filter_where = "AND " + base_query_inputs[0],
-                                          cumul_filter_metric = "AND " + base_query_inputs[1],
-                                          metric_filter_having = "AND " + base_query_inputs[2])
+        elig_devices2 = base_query.format(attr_filter = "AND " + attribute_sql.result, # NEED TO ADD A COALESCE HERE WITH 1=1
+                                          metric_filter_where = "AND " + base_query_inputs[0], # NEED TO ADD A COALESCE HERE WITH 1=1
+                                          cumul_filter_metric = "AND " + base_query_inputs[1], # NEED TO ADD A COALESCE HERE WITH 1=1
+                                          metric_filter_having = "AND " + base_query_inputs[2]) # NEED TO ADD A COALESCE HERE WITH 1=1
         
         
         return elig_devices2
-    
-    
-    # TODO: add in capability to do events level filtering 
-    # Example events level query
-    # ANALYTICS_FILTER_QUERY """
-    #   SELECT
-    #     device_id,
-    #     device_first_seen_ts,
-    #     DATE_TRUNC('day', ts) AS ds,
-    #     DATEADD('week',-2,DATE_TRUNC('week',GETDATE())) as first_exposure_ds,
-    #     platform,
-    #     platform_type,
-    #     max(case when is_confirmed = 't' then 1 else 0 end) AS metric_value
-    #   from
-    #     tubidw.sampled_analytics_thousandth -- sampled table
-    #   where
-    #     DATE_TRUNC('week',ts) >= dateadd('week',-4,DATE_TRUNC('week',GETDATE()))
-    #     and DATE_TRUNC('week',ts) < DATE_TRUNC('week',GETDATE())
-
-    #     and user_id != device_id -- signed in condition
-    #     AND UPPER(platform) IN ('WEB', 'IPHONE')
-    #     AND device_first_seen_ts IS NOT NULL
-    #   group by
-    #     1,2,3,4,5,6
-    # """
