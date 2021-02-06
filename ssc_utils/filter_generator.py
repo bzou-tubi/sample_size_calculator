@@ -180,18 +180,20 @@ class filter_generator(object):
             # for now, the only aggregation is "MAX" but might want to open up to others in the future
 
             if (filter_type == 'metric') & (condition in ('<', '<=', 'BETWEEN')):
-                return 'MAX(' + field + ')' + ' ' + condition + ' ' + value + ''
+                return "AND " + 'MAX(' + field + ')' + ' ' + condition + ' ' + value + ''
+            elif filter_type in ('attribute', 'event'):
+                return "AND " + field + ' ' + condition + ' ' + value + ''
             else:
-                return field + ' ' + condition + ' ' + value + ''
+                return NotImplementedError()
     
     
-    def set_metric_filter_sql_inputs(self, metric_sql):
+    def set_metric_filter_sql_inputs(self, metric_sql_interact):
         """
         Generates a 3-element list that categorizes the metric filter inputed into here as a "HAVING" or "WHERE" filter. 
         This allows us to put the metric filter in the correct place when forming our filter SQL string. 
         
         Args:
-            metric_sql: interactive object (user generated)
+            metric_sql_interact: interactive object (user generated)
         
         Returns: 
             A 3-element list with:
@@ -203,12 +205,12 @@ class filter_generator(object):
         
         cumul_metric_str = metric_sql_having = metric_sql_where = ''
 
-        if metric_sql.children[1].value in ('<', '<=', 'BETWEEN'):
-            cumul_metric_str = metric_sql.children[0].value
-            metric_sql_having = metric_sql.result
+        if metric_sql_interact.children[1].value in ('<', '<=', 'BETWEEN'):
+            cumul_metric_str = metric_sql_interact.children[0].value
+            metric_sql_having = metric_sql_interact.result
         else:
             cumul_metric_str = 0
-            metric_sql_where = metric_sql.result
+            metric_sql_where = metric_sql_interact.result
         
         return [metric_sql_where, cumul_metric_str, metric_sql_having]
 
@@ -230,10 +232,10 @@ class filter_generator(object):
         base_query = self.base_amh_query()
         base_query_inputs = self.set_metric_filter_sql_inputs(metric_sql)
         
-        elig_devices2 = base_query.format(attr_filter = "AND " + attribute_sql.result, # NEED TO ADD A COALESCE HERE WITH 1=1
-                                          metric_filter_where = "AND " + base_query_inputs[0], # NEED TO ADD A COALESCE HERE WITH 1=1
-                                          cumul_filter_metric = "AND " + base_query_inputs[1], # NEED TO ADD A COALESCE HERE WITH 1=1
-                                          metric_filter_having = "AND " + base_query_inputs[2]) # NEED TO ADD A COALESCE HERE WITH 1=1
+        elig_devices2 = base_query.format(attr_filter = attribute_sql.result, 
+                                          metric_filter_where = base_query_inputs[0], 
+                                          cumul_filter_metric = base_query_inputs[1], 
+                                          metric_filter_having = base_query_inputs[2]) 
         
         
         return elig_devices2
