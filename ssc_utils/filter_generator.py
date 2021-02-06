@@ -3,8 +3,21 @@ import pandas as pd
 
 class filter_generator(object):
     """
-    Contains a set of functions that generates the SQL CTEs that go through CUPED calculations. 
-    Should always be the first CTE in the final SQL string.     
+    Contains a set of functions that generates the SQL CTEs that filter and give a list of eligible device_ids based on user-specified conditions. 
+    Should always be the first CTE in the final SQL string. 
+
+    There are 3 levels of filtering available, from easiest to hardest:
+        - device_metric_daily
+        - all_metric_hourly
+        - analytics_richevent (can be estimated with sampled_analytics_thousandth)
+
+    There are also 3 types of device filters, from easiest to hardest:
+        - attributes (ie. country, platform, signed in users, etc.)
+        - metrics (ie. devices with at least 1 hour of TVT)
+            - This requires grabbing a device's whole history, and calculating cumulative sums of the metric we desire to filter
+            - There is also difficulty in putting the filtering code in the correct place within the SQL
+            - For example, for > metric filters, such as "at least 1 hour TVT", we can use the cumulated metric in the "where" clause. 
+            - For < metric filters however, we must use a max(cumulated metric) and put the filter in the "having" clause.  
     """
 
     def attribute_conditions_choices(self):
@@ -25,6 +38,7 @@ class filter_generator(object):
             '<=',
             'BETWEEN'
         ] + self.attribute_conditions_choices()
+        metric_conditions.remove('=')
         return metric_conditions 
 
     def filter_attributes_choices(self):
@@ -66,7 +80,7 @@ class filter_generator(object):
         """
         Returns a SQL CTE string, with the last CTE containing a list of device_ids to be joined later.  
         
-        The resulting string has 4 dynamic inputs that can be specified by the user: 
+        The resulting string has 4 inputs that can be specified by the user: 
             attr_filter
             metric_filter_where
             cumul_filter_metric
@@ -151,22 +165,23 @@ class filter_generator(object):
         Args:
             field: the column name of the attribute/metric the user wants to filter on
             condition: the filtering condition for the field (ie. <, =, BETWEEN, etc.)
-            value: the value to filter on for the condition 
+            value: the value to filter on for the condition (need quotes around strings)
         
         Returns: 
-            SQL string to insert into a "where" or "having" section of a SQL query.
-            For example, this will return something like: "AND tvt_sec > 3600"
+            String to insert a conditional into a "where", "having", or "case when" section of a SQL query.
+            For example, this will return something like: "tvt_sec > 3600"
         """
 
         if field == 'no filters': 
-            return ''
+                return ''
         else: 
-            if condition in ('<', '<=', 'BETWEEN'):
             # for < (less than) filters, need to use a "having" filter with an aggregation on the metric
             # for now, the only aggregation is "MAX" but might want to open up to others in the future
-                return 'AND ' + 'MAX(' + field + ')' + ' ' + condition + ' ' + value + ''
+
+            if (condition == 'metric') & (condition in ('<', '<=', 'BETWEEN')):
+                return 'MAX(' + field + ')' + ' ' + condition + ' ' + value + ''
             else:
-                return 'AND ' + field + ' ' + condition + ' ' + value + ''
+                return field + ' ' + condition + ' ' + value + ''
     
     
     def set_metric_filter_sql_inputs(self, metric_sql):
@@ -212,10 +227,10 @@ class filter_generator(object):
         base_query = self.base_amh_query()
         base_query_inputs = self.set_metric_filter_sql_inputs(metric_sql)
         
-        elig_devices2 = base_query.format(attr_filter = attribute_sql.result,
-                                          metric_filter_where = base_query_inputs[0],
-                                          cumul_filter_metric = base_query_inputs[1],
-                                          metric_filter_having = base_query_inputs[2])
+        elig_devices2 = base_query.format(attr_filter = "AND " + attribute_sql.result,
+                                          metric_filter_where = "AND " + base_query_inputs[0],
+                                          cumul_filter_metric = "AND " + base_query_inputs[1],
+                                          metric_filter_having = "AND " + base_query_inputs[2])
         
         
         return elig_devices2
