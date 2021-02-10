@@ -139,15 +139,14 @@ class filter_generator(object):
             
     def dmd_metric_filter_query(self):            
         """
-        The resulting string has 3 input that can be specified by the user: 
-            metric_filter_where
+        The resulting string has 2 inputs: 
             cumul_filter_metric
             metric_filter_having
         """ 
         
         metric_filter_query = """
         , elig_device_metrics as (
-            -- For eligible devices, pull their whole history
+            -- For eligible devices, pull their whole history for the metric we want to filter
             SELECT 
                 d.device_id,
                 d.device_first_seen_ts,
@@ -155,16 +154,8 @@ class filter_generator(object):
                 d.platform,
                 d.platform_type,
                 d.ds,
-
                 -- For filtering devices
-                sum({cumul_filter_metric}) as daily_filter_metric,
-
-                -- For calculating metrics
-                sum(d.tvt_sec) as tvt_sec,
-                sum(d.user_signup_count) as user_signup_count,
-                sum(d.device_registration_count) as device_registration_count,
-                sum(d.signup_or_registration_activity_count) as signup_or_registration_activity_count,
-                sum(d.visit_total_count) as visit_total_count
+                sum({cumul_filter_metric}) as daily_filter_metric
             FROM tubidw.device_metric_daily as d
             JOIN start_devices as e
                 ON d.device_id = e.device_id
@@ -179,22 +170,16 @@ class filter_generator(object):
         , elig_devices as (
             SELECT device_id
             FROM elig_device_cumul_filter
-
-            -- cumulative metric filters dynamically populate below 
-            WHERE 1=1
-            {metric_filter_where}
-            -- example: 
-            -- AND cumul_filter_metric >= 3600.0      -- at least 60 mins of cumulative TVT
-
             GROUP BY 1
-
             HAVING 1=1
+            -- cumulative metric filters dynamically populate below 
             {metric_filter_having}
             -- example: 
+            -- AND max(cumul_filter_metric) >= 3600.0 -- at least 60 mins of cumulative TVT
             -- AND max(cumul_filter_metric) <= 3600.0 -- less than 60 mins of cumulative TVT
         )
         """
-        return amh_filter_query
+        return metric_filter_query
     
     def events_sessionized_query(self):
         """One input: attr_filter"""
@@ -236,15 +221,11 @@ class filter_generator(object):
             a.status,
             NVL(content_series_id, content_id) as start_video_content_id,
             LEAD(a.ts, 1) OVER (PARTITION BY a.device_id ORDER BY a.ts ASC) as next_time,
-            LEAD(a.event_name, 1) OVER (PARTITION BY a.device_id ORDER BY a.ts ASC) as next_event_name,
-            LEAD(a.page_type, 1) OVER (PARTITION BY a.device_id ORDER BY a.ts ASC) as next_source_page_type,
-
             CASE WHEN next_time > a.ts + interval '30 minutes' then 1 else 0 end as session_counter -- TODO: make the interval user-specified
 
           FROM tubidw.sampled_analytics_thousandth a
           WHERE DATE_TRUNC('week',ts) >= dateadd('week',-4, DATE_TRUNC('week',GETDATE()))
-                    AND DATE_TRUNC('week',ts) < DATE_TRUNC('week',GETDATE())
-
+            AND DATE_TRUNC('week',ts) < DATE_TRUNC('week',GETDATE())
           {attr_filter} -- attribute filters dynamically populate here
         )
 
@@ -252,7 +233,7 @@ class filter_generator(object):
           SELECT
             *,
             1 + coalesce(sum(session_counter) OVER (PARTITION BY device_id ORDER BY ts rows between UNBOUNDED preceding and 1 PRECEDING), 0) as session_num
-          FROM next_events
+          FROM start_devices
         )
         """
         return sessionized_sql
@@ -293,8 +274,7 @@ class filter_generator(object):
             from sessionized_events
             )
 
-            -- TODO: can we save time by filtering the events in question? 
-            -- Does not save much time with sampled_analytics_thousandth 
+            -- TODO: can we save time by filtering the events? Doesn't save much time with sampled_analytics_thousandth 
             -- WHERE {condition1} 
             -- AND {condition2} 
         )
@@ -313,6 +293,15 @@ class filter_generator(object):
           SELECT
             device_id,
             session_num,
+            
+            -- Flag indicating whether the device had a relevant event
+            -- TODO: auto-update with http://dw-docs.production-public.tubi.io/ux/#!/macro/macro.core_metrics.all_metric_event_name_filtered
+            BOOL_OR(CASE WHEN event_name in ('PlayProgressEvent', 'StartVideoEvent', 'StartTrailerEvent', 'PageLoadEvent',
+                                         'AccountEvent', 'ActiveEvent', 'StartAdEvent', 'FinishAdEvent', 'SubtitlesToggleEvent', 'SearchEvent',
+                                         'SeekEvent', 'ResumeAfterBreakEvent', 'PauseToggleEvent', 'CastEvent', 'LivePlayProgressEvent',
+                                         'LivePlayProgressEventEvent', 'StartLiveVideoEvent', 'BookmarkEvent'
+                                         ) THEN TRUE ELSE FALSE END) AS has_all_metric_hourly_events,
+        
             -- Aggregate values
             MAX(CASE WHEN has_condition1_condition2 THEN 1 ELSE 0 END) > 0 AS has_condition1_condition2,
             MAX(CASE WHEN DATEDIFF('second', ts_condition1, ts_condition2) <= COALESCE( {time_interval}, 999999) THEN 1 ELSE 0 END) > 0 AS time_condition,
@@ -343,7 +332,7 @@ class filter_generator(object):
           FROM
             base_summarized_sessions
           GROUP BY
-            1, 2, 3, 4, 5, 6, 7, 8, 9
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10
         )
         
         , elig_devices as ( 
@@ -351,6 +340,7 @@ class filter_generator(object):
             FROM summarized_session
             GROUP BY 1
             HAVING BOOL_OR(has_both_conditions_time)
+            AND BOOL_OR(has_all_metric_hourly_events) -- using this brings the number of devices closer to all_metric_hourly (2.5% off)
         )
             
         """
@@ -379,8 +369,8 @@ class filter_generator(object):
         else: 
             if filter_type in ('metric', 'attribute', 'event'):
                 # for < (less than) filters on metrics, we need to use a "having" filter with an aggregation (only MAX for now) on the metric
-                if (filter_type == 'metric') & (condition in ('<', '<=', 'BETWEEN')):
-                    return 'AND ' + 'MAX(' + field + ')' + ' ' + condition + ' ' + value + ''
+                if (filter_type == 'metric'):
+                    return 'AND ' + 'MAX(cumul_filter_metric)' + ' ' + condition + ' ' + value + ''
                 else:
                     return 'AND ' + field + ' ' + condition + ' ' + value + ''
             else:
@@ -403,66 +393,78 @@ class filter_generator(object):
             placeholders = ','.join(['%s'] * len(event_names))
             in_events = "{placeholders}".format(placeholders = event_names).replace(',)', ')')
             return "event_name IN " + in_events + " " + sub_condition_sql
-            
-        
     
-    def set_metric_filter_sql_inputs(self, metric_sql_interact):
-        """
-        Generates a 3-element list that categorizes the metric filter inputed as a "HAVING" or "WHERE" filter. 
-        This allows us to put the metric filter in the correct place when forming our filter SQL string. 
+#     def set_metric_filter_sql_inputs(self, metric_sql_interact):
+#         """
+#         Generates a 2-element list that categorizes the metric filter inputed into a "HAVING" filter
+#         This allows us to put the metric name and conditional in the correct place when forming our filter SQL string. 
         
-        Args:
-            metric_sql_interact: interactive object (user generated)
+#         Args:
+#             metric_sql_interact: interactive object (user generated)
         
-        Returns: 
-            A 3-element list with:
-                metric_sql_where: string with full SQL where condition (ie. user_id IS NOT NULL)  
-                cumul_metric_str: string field to be used in cumulative filtering (tvt_sec). Need separate so SQL can pre-cumulate the desired metric.
-                metric_sql_having: string with full SQL having condition (ie. tvt_sec > 3600)  
-            Any/all of these 3 elements can be null/empty if the user does not specify a filter. 
-        """
+#         Returns: 
+#             A 2-element list with:
+#                 cumul_metric_str: string field to be used in cumulative filtering (tvt_sec). Need separate so SQL can pre-cumulate the desired metric.
+#                 metric_sql_having: string with full SQL having condition (ie. tvt_sec > 3600)  
+#             Any/all of these 2 elements can be null/empty if the user does not specify a filter. 
+#         """
         
-        cumul_metric_str = metric_sql_having = metric_sql_where = ''
-
-        if metric_sql_interact.children[1].value in ('<', '<=', 'BETWEEN'):
-            cumul_metric_str = metric_sql_interact.children[0].value
-            metric_sql_having = metric_sql_interact.result
-        else:
-            cumul_metric_str = 0
-            metric_sql_where = metric_sql_interact.result
+#         metric_sql_having = metric_condition_interact.result
+#         cumul_metric_str = metric_condition_interact.children[0].value
         
-        return [metric_sql_where, cumul_metric_str, metric_sql_having]
+#         return [cumul_metric_str, metric_sql_having]
 
     
     ##### CTE Generator Function #####
     # This glues everything together and generates a CTE with a list of eligible device_ids 
-
-    def generate_nonevent_filter_cte(self, attribute_sql, metric_sql):
+    
+    def generate_filter_cte(self, attribute_condition_interact, metric_condition_interact, 
+                            event1_condition_interact, event1_sub_condition_interact, 
+                            event2_condition_interact, event2_sub_condition_interact, 
+                            event_time_interval_interact):
         """
         Generates a string, containing a set of SQL CTEs that combines all filtering conditions. 
         The final CTE elig_devices is a list of device_ids eligible under the user-specified filtering conditions. 
         
-        Args:
-            attribute_sql: interactive object (user generated)
-            metric_sql: interactive object (user generated)
+        Args (all user-generated ipywidgets interactive types):
+            attribute_condition_interact
+            metric_condition_interact
+            event1_condition_interact
+            event2_condition_interact
+            event_time_interval_interact
         """
-        base_query = self.amh_attr_filter_query()
-        base_query_inputs = self.set_metric_filter_sql_inputs(metric_sql)
+                
+        # return only the relevant filters chosen (allows us to pick which CTEs to include)
+        if (event2_condition_interact.value[0] == 'no event filter') & (metric_condition_interact.children[0].value == 'no filters') & (attribute_condition_interact.children[0].value == 'no filters'):
+            return 'WITH'
         
-        elig_devices = base_query.format(attr_filter = attribute_sql.result, 
-                                          metric_filter_where = base_query_inputs[0], 
-                                          cumul_filter_metric = base_query_inputs[1], 
-                                          metric_filter_having = base_query_inputs[2]) 
-        
-        
-        return elig_devices
-    
-    def generate_event_filter_cte(self, attribute_sql, condition1, condition2, time_interval):
-        sessionized_query = self.events_sessionized_query().format(attr_filter = attribute_sql.result)
-        window_query = self.events_2step_window_query().format(condition1 = condition1, 
-                                                               condition2 = condition2)
-        summ_session_query = self.events_summarized_session_query().format(time_interval = time_interval.result, steps_interval = 'NULL')
+        else:
+            # Initialize all sql strings
+            attr_sql = self.amh_attr_filter_query().format(attr_filter = attribute_condition_interact.result)
+#             metric_inputs = self.set_metric_filter_sql_inputs(metric_condition_interact)
+            metric_sql = self.dmd_metric_filter_query().format(cumul_filter_metric = metric_condition_interact.children[0].value,
+                                                               metric_filter_having = metric_condition_interact.result)
 
-        elig_devices = sessionized_query + window_query + summ_session_query
-        
-        return elig_devices
+            pre_event_input = self.make_sql_event_condition_string(event_names = event1_condition_interact.value, 
+                                                                   sub_condition_sql = event1_sub_condition_interact.result)
+            primary_event_input = self.make_sql_event_condition_string(event_names = event2_condition_interact.value, 
+                                                                       sub_condition_sql = event2_sub_condition_interact.result)
+
+            sessionized_sql = self.events_sessionized_query().format(attr_filter = attribute_condition_interact.result)
+            window_sql = self.events_2step_window_query().format(condition1 = pre_event_input, condition2 = primary_event_input)
+            summ_session_sql = self.events_summarized_session_query().format(time_interval = event_time_interval_interact.result, steps_interval = 'NULL')
+            
+            if event2_condition_interact.value[0] == 'no event filter':
+                if metric_condition_interact.children[0].value == 'no filters':
+                    # scenario1: attribute CTE only
+                    return attr_sql + ','
+                else: 
+                    # scenario2: attribute CTE + metrics CTEs
+                    return attr_sql + metric_sql + ','
+            else:
+                if metric_condition_interact.children[0].value == 'no filters':
+                    # scenario3: events CTEs only
+                    return sessionized_sql + window_sql + summ_session_sql + ','
+                else: 
+                    # scenario4: events CTEs + metrics CTEs
+                    return sessionized_sql + window_sql + summ_session_sql + metric_sql + ','

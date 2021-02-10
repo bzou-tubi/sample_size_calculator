@@ -9,7 +9,7 @@ class metric_summary(object):
         """
         
         return """
-            , metrics AS (
+           , metrics AS (
               SELECT DISTINCT
                      user_data.device_id,
                      platform_type,
