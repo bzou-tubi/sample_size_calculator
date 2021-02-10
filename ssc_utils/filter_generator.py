@@ -79,9 +79,7 @@ class filter_generator(object):
         return filter_metrics 
     
     def event_name_choices(self): 
-        """List of event_names available for filtering (from sampled_analytics_thousandth)"""
-        # TODO: possible to make this faster by preloading it in the import?
-        
+        """List of event_names available for filtering (from sampled_analytics_thousandth)"""        
         query = """
             SELECT DISTINCT event_name
             FROM tubidw.sampled_analytics_thousandth
@@ -421,8 +419,7 @@ class filter_generator(object):
             return 'WITH'
         
         else:
-            # Initialize all sql strings
-            attr_sql = self.amh_attr_filter_query().format(attr_filter = attribute_condition_interact.result)
+            # Initialize static sql strings
             metric_sql = self.dmd_metric_filter_query().format(cumul_filter_metric = metric_condition_interact.children[0].value,
                                                                metric_filter_having = metric_condition_interact.result)
 
@@ -433,19 +430,28 @@ class filter_generator(object):
 
             sessionized_sql = self.events_sessionized_query().format(attr_filter = attribute_condition_interact.result)
             window_sql = self.events_2step_window_query().format(condition1 = pre_event_input, condition2 = primary_event_input)
-            summ_session_sql = self.events_summarized_session_query().format(time_interval = event_time_interval_interact.result, steps_interval = 'NULL')
             
             if event2_condition_interact.value[0] == 'no event filter':
                 if metric_condition_interact.children[0].value == 'no filters':
                     # scenario1: attribute CTE only
-                    return attr_sql.format(final_cte_name = 'elig_devices') + ','
+                    attr_sql = self.amh_attr_filter_query().format(attr_filter = attribute_condition_interact.result,
+                                                                   final_cte_name = 'elig_devices')
+                    return attr_sql + ','
                 else: 
                     # scenario2: attribute CTE + metrics CTEs
-                    return attr_sql.format(final_cte_name = 'pre_approved_devices') + metric_sql + ','
+                    attr_sql = self.amh_attr_filter_query().format(attr_filter = attribute_condition_interact.result,
+                                                                   final_cte_name = 'pre_approved_devices')
+                    return attr_sql + metric_sql + ','
             else:
                 if metric_condition_interact.children[0].value == 'no filters':
                     # scenario3: events CTEs only
-                    return sessionized_sql + window_sql + summ_session_sql.format(final_cte_name = 'elig_devices') + ','
+                    summ_session_sql = self.events_summarized_session_query().format(time_interval = event_time_interval_interact.result, 
+                                                                                     steps_interval = 'NULL', 
+                                                                                     final_cte_name = 'elig_devices')
+                    return sessionized_sql + window_sql + summ_session_sql + ','
                 else: 
                     # scenario4: events CTEs + metrics CTEs
-                    return sessionized_sql + window_sql + summ_session_sql.format(final_cte_name = 'pre_approved_devices') + metric_sql + ','
+                    summ_session_sql = self.events_summarized_session_query().format(time_interval = event_time_interval_interact.result, 
+                                                                                     steps_interval = 'NULL', 
+                                                                                     final_cte_name = 'pre_approved_devices')
+                    return sessionized_sql + window_sql + summ_session_sql + metric_sql + ','
