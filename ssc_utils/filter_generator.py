@@ -124,7 +124,7 @@ class filter_generator(object):
         """
         
         attr_filter_query = """
-        WITH start_devices as (
+        WITH {final_cte_name} as (
             -- Pull list of devices that were active (has any row; don't need TVT >0) in the past 4 weeks
             SELECT DISTINCT device_id
             FROM tubidw.all_metric_hourly
@@ -139,6 +139,8 @@ class filter_generator(object):
             
     def dmd_metric_filter_query(self):            
         """
+        This CTE must always be preceded by the attribute CTEs or events CTEs.
+
         The resulting string has 2 inputs: 
             cumul_filter_metric
             metric_filter_having
@@ -157,8 +159,8 @@ class filter_generator(object):
                 -- For filtering devices
                 sum({cumul_filter_metric}) as daily_filter_metric
             FROM tubidw.device_metric_daily as d
-            JOIN start_devices as e
-                ON d.device_id = e.device_id
+            JOIN pre_approved_devices as p
+                ON d.device_id = p.device_id
             GROUP BY 1,2,3,4,5,6
         )
 
@@ -185,7 +187,7 @@ class filter_generator(object):
         """One input: attr_filter"""
             
         sessionized_sql = """
-        WITH start_devices AS ( 
+        WITH next_event AS ( 
           -- had to change this CTE name; for some reason "events" throws an error on Redshift... no idea why it works on Periscope
           -- TODO: figure out how to auto-sync this with our Periscope snippets 
           SELECT
@@ -233,7 +235,7 @@ class filter_generator(object):
           SELECT
             *,
             1 + coalesce(sum(session_counter) OVER (PARTITION BY device_id ORDER BY ts rows between UNBOUNDED preceding and 1 PRECEDING), 0) as session_num
-          FROM start_devices
+          FROM next_event
         )
         """
         return sessionized_sql
@@ -335,7 +337,7 @@ class filter_generator(object):
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10
         )
         
-        , elig_devices as ( 
+        , {final_cte_name} as ( 
             SELECT device_id
             FROM summarized_session
             GROUP BY 1
@@ -393,28 +395,8 @@ class filter_generator(object):
             placeholders = ','.join(['%s'] * len(event_names))
             in_events = "{placeholders}".format(placeholders = event_names).replace(',)', ')')
             return "event_name IN " + in_events + " " + sub_condition_sql
-    
-#     def set_metric_filter_sql_inputs(self, metric_sql_interact):
-#         """
-#         Generates a 2-element list that categorizes the metric filter inputed into a "HAVING" filter
-#         This allows us to put the metric name and conditional in the correct place when forming our filter SQL string. 
-        
-#         Args:
-#             metric_sql_interact: interactive object (user generated)
-        
-#         Returns: 
-#             A 2-element list with:
-#                 cumul_metric_str: string field to be used in cumulative filtering (tvt_sec). Need separate so SQL can pre-cumulate the desired metric.
-#                 metric_sql_having: string with full SQL having condition (ie. tvt_sec > 3600)  
-#             Any/all of these 2 elements can be null/empty if the user does not specify a filter. 
-#         """
-        
-#         metric_sql_having = metric_condition_interact.result
-#         cumul_metric_str = metric_condition_interact.children[0].value
-        
-#         return [cumul_metric_str, metric_sql_having]
 
-    
+
     ##### CTE Generator Function #####
     # This glues everything together and generates a CTE with a list of eligible device_ids 
     
@@ -441,7 +423,6 @@ class filter_generator(object):
         else:
             # Initialize all sql strings
             attr_sql = self.amh_attr_filter_query().format(attr_filter = attribute_condition_interact.result)
-#             metric_inputs = self.set_metric_filter_sql_inputs(metric_condition_interact)
             metric_sql = self.dmd_metric_filter_query().format(cumul_filter_metric = metric_condition_interact.children[0].value,
                                                                metric_filter_having = metric_condition_interact.result)
 
@@ -457,14 +438,14 @@ class filter_generator(object):
             if event2_condition_interact.value[0] == 'no event filter':
                 if metric_condition_interact.children[0].value == 'no filters':
                     # scenario1: attribute CTE only
-                    return attr_sql + ','
+                    return attr_sql.format(final_cte_name = 'elig_devices') + ','
                 else: 
                     # scenario2: attribute CTE + metrics CTEs
-                    return attr_sql + metric_sql + ','
+                    return attr_sql.format(final_cte_name = 'pre_approved_devices') + metric_sql + ','
             else:
                 if metric_condition_interact.children[0].value == 'no filters':
                     # scenario3: events CTEs only
-                    return sessionized_sql + window_sql + summ_session_sql + ','
+                    return sessionized_sql + window_sql + summ_session_sql.format(final_cte_name = 'elig_devices') + ','
                 else: 
                     # scenario4: events CTEs + metrics CTEs
-                    return sessionized_sql + window_sql + summ_session_sql + metric_sql + ','
+                    return sessionized_sql + window_sql + summ_session_sql.format(final_cte_name = 'pre_approved_devices') + metric_sql + ','
