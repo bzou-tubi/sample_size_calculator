@@ -59,7 +59,10 @@ class metric_switcher(object):
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
             'capped_tvt'::text AS metric_name,
             'SUM'::text AS metric_collection_method, 
-            LEAST(tvt_sec / 3600.0, 4.0) AS metric_value 
+            -- LEAST(tvt_sec / 3600.0, 4.0) AS metric_value --old definition, very slightly different from below
+            CASE WHEN (SUM(tvt_sec/3600.0) OVER (PARTITION BY device_id,ds,platform)) > 4 THEN 4.0 
+                 ELSE (SUM(tvt_sec/3600.0) OVER (PARTITION BY device_id,ds,platform)) 
+            END AS metric_value
           FROM raw_user_data
         )
         """
@@ -71,7 +74,10 @@ class metric_switcher(object):
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
             'new_viewer_first_day_capped_tvt'::text AS metric_name,
             'SUM'::text AS metric_collection_method, 
-            LEAST(tvt_sec / 3600.0, 4.0) AS metric_value 
+            -- LEAST(tvt_sec / 3600.0, 4.0) AS metric_value --old definition, very slightly different from below          
+            CASE WHEN (SUM(tvt_sec/3600.0) OVER (PARTITION BY device_id,ds,platform)) > 4 THEN 4.0 
+                 ELSE (SUM(tvt_sec/3600.0) OVER (PARTITION BY device_id,ds,platform)) 
+            END AS metric_value
           FROM raw_user_data
           WHERE ds >= DATE_TRUNC('day', device_first_seen_ts) AND ds < device_first_seen_ts + INTERVAL '1 day'
         )

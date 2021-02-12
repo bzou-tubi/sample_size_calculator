@@ -1,14 +1,18 @@
 class cuped(object):
 
-    def generate_cuped_cte(self):
+    def generate_cuped_cte(self, event2_condition_interact):
         """
         Generates the SQL CTEs that go through CUPED calculations. Should always be the last CTE in the final SQL string. 
             
-        Returns:
-            String
+        Returns: String
         """
         
-        return """
+        if event2_condition_interact.value[0] == 'no event filter':
+            sample_multiplier = '1.0'
+        else:
+            sample_multiplier = '1000.0'
+            
+        base_cuped_query = """
             -- Cuped values
             , cuped_values_1 AS (
               SELECT
@@ -140,8 +144,10 @@ class cuped(object):
             SELECT 
                    metric_name,
                    platform,
-                   size AS observations,
+                   size * {sampling} AS observations,
                    avg_cuped_result,
                    std_cuped_result
             FROM cuped_results        
             """
+        
+        return base_cuped_query.format(sampling = sample_multiplier)

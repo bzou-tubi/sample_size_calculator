@@ -24,8 +24,8 @@ class filter_generator(object):
     
     ##### Choices #####
     
-    def choose(self, choice):
-        return choice
+    def interval(self, interval):
+        return interval
     
     def attribute_conditions_choices(self):
         attribute_conditions = [
@@ -247,7 +247,8 @@ class filter_generator(object):
         """
 
         window_sql = """
-        , window as (
+        , event_window as (
+          -- had to change this CTE name; for some reason "window" throws an error on TDR... no idea why it works on Periscope
           -- main query to get condition 2 status (funnel output)
           select
             *,
@@ -310,7 +311,7 @@ class filter_generator(object):
             SUM(CASE WHEN has_condition1_condition2 THEN 1 ELSE 0 END) AS sum_both_conditions,
             SUM(CASE WHEN has_condition1 THEN 1 ELSE 0 END) >= SUM(has_condition1_condition2) AS condition1_before_condition2,
             SUM(CASE WHEN has_condition1 THEN 1 ELSE 0 END) - SUM(CASE WHEN has_condition1_condition2 THEN 1 ELSE 0 END) AS condition_difference
-          FROM window
+          FROM event_window
           GROUP BY 1, 2
         )
 
