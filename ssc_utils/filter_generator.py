@@ -83,7 +83,7 @@ class filter_generator(object):
         query = """
             SELECT DISTINCT event_name
             FROM tubidw.sampled_analytics_thousandth
-            WHERE date >= dateadd('day',-7,GETDATE())
+            WHERE date >= dateadd('day',-2,GETDATE())
         """
         df = tdr.query_redshift(query).to_df()
         return ['no event filter'] + pd.Series(df['event_name']).sort_values().tolist()
@@ -432,6 +432,7 @@ class filter_generator(object):
             sessionized_sql = self.events_sessionized_query().format(attr_filter = attribute_condition_interact.result)
             window_sql = self.events_2step_window_query().format(condition1 = pre_event_input, condition2 = primary_event_input)
             
+            # Dynamically return the filtering CTEs based on which filter types were chosen
             if event2_condition_interact.value[0] == 'no event filter':
                 if metric_condition_interact.children[0].value == 'no filters':
                     # scenario1: attribute CTE only
