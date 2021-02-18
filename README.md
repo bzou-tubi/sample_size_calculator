@@ -1,5 +1,7 @@
 # Sample Size Calculator (WIP)
 
+[Link to calculator](https://tdr.production-public.tubi.io/user-redirect/lab/tree/shared/data_science/sample_size_calculator/sample_size_calc_prototype.ipynb)
+
 Purpose: we want a version of the [Periscope dashboard](https://app.periscopedata.com/app/adrise:tubi/676521/(Official)-Experimentation-Sample-Size-Calculator), but with additional flexibility of filtering for a specific set of users. 
 
 The very high level concept of this tool:
