@@ -27,25 +27,20 @@ class filter_generator(object):
     def interval(self, interval):
         return interval
     
-    def attribute_conditions_choices(self):
-        attribute_conditions = [
+    def condition_choices(self):
+        conditions = [
             '=',
             '<>',
             'IN',
             'IS',
-            'IS NOT'
-        ]
-        return attribute_conditions 
-    
-    def metric_conditions_choices(self):
-        metric_conditions =  [
+            'IS NOT',
             '>',
             '<',
             '>=',
             '<=',
             'BETWEEN'
-        ] + self.attribute_conditions_choices()
-        return metric_conditions 
+        ]
+        return conditions 
 
     def filter_attributes_choices(self):
         """List of attributes available for filtering (from all_metric_hourly)""" 
@@ -53,6 +48,8 @@ class filter_generator(object):
                 'no filters',
                 'user_id',
                 'device_id',
+                'device_first_seen_ts',
+                'device_first_view_ts',  
                 'platform',
                 'platform_type',
                 'country',
