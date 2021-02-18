@@ -7,8 +7,7 @@ The very high level concept of this tool:
 2. Run through the sample size calculations (with the ability for the user to set custom parameters). Output a table that displays sample required for all chosen platforms. 
 
 The bulk of the work is focused on adding flexibility to #1. This tool is WIP and there are many improvements to be done (in order of priority):
-- Adding analytics_richevent filtering capabilities (ie. can we pull all users who watched 70% of a video, then hit the back button?)
-- Adding capability to have more than 1 attribute and metric filter
+- Adding capability to have more than 1 filter in a specific filter type
 - Adding flexibility for the user to define their own primary metrics
 
 
@@ -27,7 +26,7 @@ The goal of this section is to pull a list of specific users that are eligible f
     
 For our first prototype, we're only using all_metric_hourly to cover most filtering cases. To achieve a higher level of filtering flexibilty, we will include analytics_richevent. To reduce run times and processing work, we can include device_metric_daily.
 
-#### In general, there are 2 ways to filter users:
+#### In general, there are 3 ways to filter users:
 1. Attributes (ie. ROKU+AMAZON, certain os, kids mode only, etc.)
 2. Metrics (ie. watched at least 60 mins TVT, completed 3 movies, etc.)
 3. Events (ie. user exited the video player after completing 70% of the content)
