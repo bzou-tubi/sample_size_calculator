@@ -8,8 +8,8 @@ import numpy as np
 def effect(effect=0.01):
     return effect
 
-def variations(variations=1):
-    return variations
+def treatments(treatments=1):
+    return treatments
 
 def allocation(allocation=0.50):
     return allocation
