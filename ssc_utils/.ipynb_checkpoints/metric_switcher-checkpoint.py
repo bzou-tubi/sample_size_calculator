@@ -14,7 +14,7 @@ class metric_switcher(object):
             String
         """
         # Get the method from 'self'. Default to a lambda.
-        method = getattr(self, metric, lambda: "Invalid metric")
+        method = getattr(self, metric, lambda: "Invalid metric").replace('--','_').replace('-','_')
         # Call the method as we return it
         return method()
     
@@ -22,19 +22,19 @@ class metric_switcher(object):
         # Possible metrics to use for MDE (same as current calculator)
         # may want to make this consistent with the primary metrics available in exp dash in the future
         metrics = [
-            'tvt_capped',
-            'tvt_capped_new_visitors',
-            'registration_did_signup',
-            'registration_did_activate', 
+            'tvt-capped',
+            'tvt-capped_new_visitors',
+            'registration-did_signup',
+            'registration-did_activate', 
             'visits',
             'conversion',
-            'conversion_new_visitors',
-            'retention_new_viewers',
+            'conversion--new_visitors',
+            'retention--new_viewers',
             'retention',
             'ad_impressions',
             'tvt',
-            'tvt_vod_series',
-            'tvt_vod_movie'
+            'tvt-vod_series',
+            'tvt-vod_movie'
         ]
         return metrics
         
