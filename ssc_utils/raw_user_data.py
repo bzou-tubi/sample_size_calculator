@@ -17,6 +17,7 @@ class raw_user_data(object):
                   DATEADD('week', -2, DATE_TRUNC('week', last_exposure_ds)) AS first_exposure_ds,
                   -- Metrics
                   sum(tvt_sec) as tvt_sec,
+                  sum(linear_tvt_sec) AS linear_tvt_sec,
                   sum(user_signup_count) as user_signup_count,
                   sum(device_registration_count) as device_registration_count,
                   sum(signup_or_registration_activity_count) as signup_or_registration_activity_count,
