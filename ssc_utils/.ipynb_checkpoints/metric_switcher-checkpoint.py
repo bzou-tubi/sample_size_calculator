@@ -14,7 +14,9 @@ class metric_switcher(object):
             String
         """
         # Get the method from 'self'. Default to a lambda.
-        method = getattr(self, metric, lambda: "Invalid metric").replace('--','_').replace('-','_')
+        metric_clean = metric.replace('--','_').replace('-','_')
+        method = getattr(self, metric_clean, lambda: "Invalid metric")
+        
         # Call the method as we return it
         return method()
     
@@ -22,6 +24,7 @@ class metric_switcher(object):
         # Possible metrics to use for MDE (same as current calculator)
         # may want to make this consistent with the primary metrics available in exp dash in the future
         metrics = [
+            'tvt',
             'tvt-capped',
             'tvt-capped_new_visitors',
             'registration-did_signup',
@@ -32,7 +35,6 @@ class metric_switcher(object):
             'retention--new_viewers',
             'retention',
             'ad_impressions',
-            'tvt',
             'tvt-vod_series',
             'tvt-vod_movie'
         ]
@@ -62,7 +64,7 @@ class metric_switcher(object):
             'tvt-capped'::text AS metric_name,
             'SUM'::text AS metric_collection_method, 
             CASE WHEN (SUM((tvt_sec + linear_tvt_sec)/3600.0) OVER (PARTITION BY device_id,ds,platform)) > 4 THEN 4.0 
-                 ELSE (SUM(tvt_sec + linear_tvt_sec)/3600.0) OVER (PARTITION BY device_id,ds,platform)) 
+                 ELSE (SUM((tvt_sec + linear_tvt_sec)/3600.0) OVER (PARTITION BY device_id,ds,platform)) 
             END AS metric_value
           FROM raw_user_data
         )
@@ -76,7 +78,6 @@ class metric_switcher(object):
             'tvt-capped-new_visitors'::text AS metric_name,
             'SUM'::text AS metric_collection_method, 
             CASE WHEN (SUM((tvt_sec + linear_tvt_sec)/3600.0) OVER (PARTITION BY device_id,ds,platform)) > 4 THEN 4.0 ELSE (SUM((tvt_sec + linear_tvt_sec)/3600.0) OVER (PARTITION BY device_id,ds,platform)) END AS metric_value
-            'SUM' AS metric_collection_method,
           FROM raw_user_data
           WHERE ds >= DATE_TRUNC('day',device_first_seen_ts) AND ds < device_first_seen_ts + INTERVAL '7 day'
         )
@@ -189,13 +190,16 @@ class metric_switcher(object):
             SELECT  d.device_id,
                     d.ds,
                     d.platform,
+                    d.platform_type,
+                    d.device_first_seen_ts,
+                    d.first_exposure_ds,
                     SUM(rev.ad_impression_total_count) AS ad_impression_total_count,
                     SUM(rev.gross_revenue) AS gross_revenue
             FROM ad_impressions_data AS rev
               RIGHT JOIN raw_user_data AS d
                 ON d.device_id = rev.device_id
                 AND d.ds = rev.ds
-            GROUP BY 1, 2, 3
+            GROUP BY 1, 2, 3, 4, 5, 6
         )
 
           -- Impressions

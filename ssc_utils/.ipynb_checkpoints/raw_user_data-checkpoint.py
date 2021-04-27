@@ -10,6 +10,7 @@ class raw_user_data(object):
               SELECT 
                   a.device_id,
                   device_first_seen_ts,
+                  device_first_view_ts,
                   ds,
                   platform_type,
                   platform,
