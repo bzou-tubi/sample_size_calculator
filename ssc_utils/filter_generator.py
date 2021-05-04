@@ -103,7 +103,8 @@ class filter_generator(object):
                 'manip',
                 'auth_type',
                 'current_auth_type',
-                'status'
+                'status',
+                'dialog_type'
             ]
         return event_fields 
     
@@ -216,6 +217,7 @@ class filter_generator(object):
             a.auth_type,
             a.current_auth_type,
             a.status,
+            a.dialog_type,
             NVL(content_series_id, content_id) as start_video_content_id,
             LEAD(a.ts, 1) OVER (PARTITION BY a.device_id ORDER BY a.ts ASC) as next_time,
             CASE WHEN next_time > a.ts + interval '30 minutes' then 1 else 0 end as session_counter -- TODO: make the interval user-specified
