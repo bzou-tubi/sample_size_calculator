@@ -40,7 +40,7 @@ class raw_user_data(object):
         end_str = """
               WHERE DATE_TRUNC('week',ds) >= dateadd('week', -4, DATE_TRUNC('week',GETDATE()))
                 AND DATE_TRUNC('week',ds) < DATE_TRUNC('week', GETDATE())
-              GROUP BY 1,2,3,4,5,6,7
+              GROUP BY 1,2,3,4,5,6,7,8
             )
         """
         

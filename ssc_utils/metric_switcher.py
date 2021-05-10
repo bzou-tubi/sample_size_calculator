@@ -27,17 +27,22 @@ class metric_switcher(object):
             'tvt',
             'tvt-capped',
             'tvt-capped_new_visitors',
-            'registration-did_signup',
-            'registration-did_activate', 
             'visits',
-            'conversion',
-            'conversion--new_visitors',
             'retention--new_viewers',
             'retention',
             'ad_impressions',
             'tvt-vod_series',
-            'tvt-vod_movie'
+            'tvt-vod_movie',
+            'conversion-5min',
+            'conversion-5min-new_visitors'
         ]
+        """+ [
+            'registration-did_signup',
+            'registration-did_activate', 
+            'conversion',
+            'conversion--new_visitors',
+
+        ]"""
         return metrics
         
     def choose_metric(self, metric):
@@ -89,7 +94,7 @@ class metric_switcher(object):
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
             'registration-did_signup'::text AS metric_name,
-            'SUM'::text AS metric_collection_method, 
+            'MAX'::text AS metric_collection_method, 
             CASE WHEN user_signup_count > 0 THEN 1.0 ELSE 0.0 END AS metric_value
           FROM raw_user_data
         )
@@ -101,7 +106,7 @@ class metric_switcher(object):
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
             'registration-did_activate'::text AS metric_name,
-            'SUM'::text AS metric_collection_method, 
+            'MAX'::text AS metric_collection_method, 
             CASE WHEN device_registration_count > 0 THEN 1.0 ELSE 0.0 END AS metric_value
           FROM raw_user_data
         )
@@ -130,6 +135,18 @@ class metric_switcher(object):
           FROM raw_user_data
         )
         """
+    
+    def conversion_5min(self):
+        return """
+        , user_data AS (
+          SELECT 
+            device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
+            'conversion-5min'::text AS metric_name,
+            'MAX'::text AS metric_collection_method, 
+            CASE WHEN (tvt_sec + linear_tvt_sec) > 60*5.0 THEN 1.0 ELSE 0.0 END AS metric_value
+          FROM raw_user_data
+        )
+        """
 
     def conversion_new_visitors(self):
         return """
@@ -139,6 +156,19 @@ class metric_switcher(object):
             'conversion--new_visitors'::text AS metric_name,
             'MAX'::text AS metric_collection_method, 
             CASE WHEN (tvt_sec + linear_tvt_sec) > 10 THEN 1.0 ELSE 0.0 END AS metric_value
+          FROM raw_user_data
+          WHERE ds >= DATE_TRUNC('day',device_first_seen_ts) AND ds < device_first_seen_ts + INTERVAL '7 day'
+        )
+        """
+    
+    def conversion_5min_new_visitors(self):
+        return """
+        , user_data AS (
+          SELECT 
+            device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
+            'conversion-5min-new_visitors'::text AS metric_name,
+            'MAX'::text AS metric_collection_method, 
+            CASE WHEN (tvt_sec + linear_tvt_sec) > 60*5.0 THEN 1.0 ELSE 0.0 END AS metric_value
           FROM raw_user_data
           WHERE ds >= DATE_TRUNC('day',device_first_seen_ts) AND ds < device_first_seen_ts + INTERVAL '7 day'
         )
@@ -153,7 +183,7 @@ class metric_switcher(object):
             'MAX'::text AS metric_collection_method, 
             CASE WHEN ds > device_first_view_ts + INTERVAL '1 day' AND (tvt_sec + linear_tvt_sec) > 10 THEN 1.0 ELSE 0.0 END AS metric_value
           FROM raw_user_data
-          WHERE ds >= DATE_TRUNC('day',device_first_seen_ts) AND ds < device_first_seen_ts + INTERVAL '7 day'
+          WHERE ds >= DATE_TRUNC('day',device_first_view_ts) AND ds < device_first_view_ts + INTERVAL '7 day'
         )
         """
 
@@ -193,7 +223,7 @@ class metric_switcher(object):
                     d.platform_type,
                     d.device_first_seen_ts,
                     d.first_exposure_ds,
-                    SUM(rev.ad_impression_total_count) AS ad_impression_total_count,
+                    COALESCE(SUM(rev.ad_impression_total_count), 0)::float AS ad_impression_total_count,
                     SUM(rev.gross_revenue) AS gross_revenue
             FROM ad_impressions_data AS rev
               RIGHT JOIN raw_user_data AS d
