@@ -10,6 +10,7 @@ class raw_user_data(object):
               SELECT 
                   a.device_id,
                   device_first_seen_ts,
+                  device_first_view_ts,
                   ds,
                   platform_type,
                   platform,
@@ -17,10 +18,13 @@ class raw_user_data(object):
                   DATEADD('week', -2, DATE_TRUNC('week', last_exposure_ds)) AS first_exposure_ds,
                   -- Metrics
                   sum(tvt_sec) as tvt_sec,
+                  sum(linear_tvt_sec) AS linear_tvt_sec,
                   sum(user_signup_count) as user_signup_count,
                   sum(device_registration_count) as device_registration_count,
                   sum(signup_or_registration_activity_count) as signup_or_registration_activity_count,
-                  sum(visit_total_count) as visit_total_count
+                  sum(visit_total_count) as visit_total_count,
+                  sum(series_tvt_sec) as series_tvt_sec,
+                  sum(movie_tvt_sec) AS movie_tvt_sec
               FROM tubidw.device_metric_daily as a
         """
         
@@ -36,7 +40,7 @@ class raw_user_data(object):
         end_str = """
               WHERE DATE_TRUNC('week',ds) >= dateadd('week', -4, DATE_TRUNC('week',GETDATE()))
                 AND DATE_TRUNC('week',ds) < DATE_TRUNC('week', GETDATE())
-              GROUP BY 1,2,3,4,5,6,7
+              GROUP BY 1,2,3,4,5,6,7,8
             )
         """
         

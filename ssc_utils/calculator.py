@@ -5,7 +5,7 @@ import numpy as np
 
 # Functions that set default parameters
 
-def effect(effect=0.01):
+def effect(effect=0.010):
     return effect
 
 def treatments(treatments=1):

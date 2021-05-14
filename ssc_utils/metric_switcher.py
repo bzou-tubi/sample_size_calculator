@@ -14,7 +14,9 @@ class metric_switcher(object):
             String
         """
         # Get the method from 'self'. Default to a lambda.
-        method = getattr(self, metric, lambda: "Invalid metric")
+        metric_clean = metric.replace('--','_').replace('-','_')
+        method = getattr(self, metric_clean, lambda: "Invalid metric")
+        
         # Call the method as we return it
         return method()
     
@@ -22,87 +24,90 @@ class metric_switcher(object):
         # Possible metrics to use for MDE (same as current calculator)
         # may want to make this consistent with the primary metrics available in exp dash in the future
         metrics = [
-            'capped_tvt',
-            'new_viewer_first_day_capped_tvt',
-            'signups',
-            'activations', 
+            'tvt',
+            'tvt-capped',
+            'tvt-capped_new_visitors',
             'visits',
-            'viewer_conversion',
-            'new_viewer_first_day_conversion',
-            'new_user_1_to_8_days_retained',
-            'all_user_retained_in_experiment_timeframe',
+            'retention--new_viewers',
+            'retention',
             'ad_impressions',
-            'all_tvt_hours'
+            'tvt-vod_series',
+            'tvt-vod_movie',
+            'conversion-5min',
+            'conversion-5min-new_visitors'
         ]
+        """+ [
+            'registration-did_signup',
+            'registration-did_activate', 
+            'conversion',
+            'conversion--new_visitors',
+
+        ]"""
         return metrics
         
     def choose_metric(self, metric):
         # the most important function in this tool
         return metric
 
-    def all_tvt_hours(self):
+    def tvt(self):
         return """
         , user_data AS (
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'all_tvt_hours'::text AS metric_name,
+            'tvt'::text AS metric_name,
             'SUM'::text AS metric_collection_method, 
-            tvt_sec / 3600.0 AS metric_value
+            (tvt_sec + linear_tvt_sec) / 3600.0 AS metric_value
           FROM raw_user_data
         )
         """
 
-    def capped_tvt(self):
+    def tvt_capped(self):
         return """
         , user_data AS (
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'capped_tvt'::text AS metric_name,
+            'tvt-capped'::text AS metric_name,
             'SUM'::text AS metric_collection_method, 
-            -- LEAST(tvt_sec / 3600.0, 4.0) AS metric_value --old definition, very slightly different from below
-            CASE WHEN (SUM(tvt_sec/3600.0) OVER (PARTITION BY device_id,ds,platform)) > 4 THEN 4.0 
-                 ELSE (SUM(tvt_sec/3600.0) OVER (PARTITION BY device_id,ds,platform)) 
+            CASE WHEN (SUM((tvt_sec + linear_tvt_sec)/3600.0) OVER (PARTITION BY device_id,ds,platform)) > 4 THEN 4.0 
+                 ELSE (SUM((tvt_sec + linear_tvt_sec)/3600.0) OVER (PARTITION BY device_id,ds,platform)) 
             END AS metric_value
           FROM raw_user_data
         )
         """
 
-    def new_viewer_first_day_capped_tvt(self):
+    def tvt_capped_new_visitors(self):
         return """
         , user_data AS (
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'new_viewer_first_day_capped_tvt'::text AS metric_name,
+            'tvt-capped-new_visitors'::text AS metric_name,
             'SUM'::text AS metric_collection_method, 
-            -- LEAST(tvt_sec / 3600.0, 4.0) AS metric_value --old definition, very slightly different from below          
-            CASE WHEN (SUM(tvt_sec/3600.0) OVER (PARTITION BY device_id,ds,platform)) > 4 THEN 4.0 
-                 ELSE (SUM(tvt_sec/3600.0) OVER (PARTITION BY device_id,ds,platform)) 
-            END AS metric_value
+            CASE WHEN (SUM((tvt_sec + linear_tvt_sec)/3600.0) OVER (PARTITION BY device_id,ds,platform)) > 4 THEN 4.0 ELSE (SUM((tvt_sec + linear_tvt_sec)/3600.0) OVER (PARTITION BY device_id,ds,platform)) END AS metric_value
           FROM raw_user_data
-          WHERE ds >= DATE_TRUNC('day', device_first_seen_ts) AND ds < device_first_seen_ts + INTERVAL '1 day'
+          WHERE ds >= DATE_TRUNC('day',device_first_seen_ts) AND ds < device_first_seen_ts + INTERVAL '7 day'
         )
         """
 
-    def signups(self):
+    def registration_did_signup(self):
         return """
         , user_data AS (
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'signups'::text AS metric_name,
-            'SUM'::text AS metric_collection_method, 
-            user_signup_count AS metric_value
+            'registration-did_signup'::text AS metric_name,
+            'MAX'::text AS metric_collection_method, 
+            CASE WHEN user_signup_count > 0 THEN 1.0 ELSE 0.0 END AS metric_value
           FROM raw_user_data
         )
         """
 
-    def activations(self):
+    def registration_did_activate(self):
         return """
         , user_data AS (
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'activations'::text AS metric_name,
-            'SUM'::text AS metric_collection_method, 
-            device_registration_count AS metric_value 
+            'registration-did_activate'::text AS metric_name,
+            'MAX'::text AS metric_collection_method, 
+            CASE WHEN device_registration_count > 0 THEN 1.0 ELSE 0.0 END AS metric_value
           FROM raw_user_data
         )
         """
@@ -112,61 +117,86 @@ class metric_switcher(object):
         , user_data AS (
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'visits'::text AS metric_name,
+            'visit'::text AS metric_name,
             'SUM'::text AS metric_collection_method, 
-            visit_total_count AS metric_value 
+            visit_total_count::float AS metric_value
           FROM raw_user_data
         )
         """
     
-    def viewer_conversion(self):
+    def conversion(self):
         return """
         , user_data AS (
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'viewer_conversion'::text AS metric_name,
+            'conversion'::text AS metric_name,
             'MAX'::text AS metric_collection_method, 
-            CASE WHEN tvt_sec > 10 THEN 1.0 ELSE 0.0 END AS metric_value 
+            CASE WHEN (tvt_sec + linear_tvt_sec) > 10 THEN 1.0 ELSE 0.0 END AS metric_value
           FROM raw_user_data
         )
         """
-
-    def new_viewer_first_day_conversion(self):
+    
+    def conversion_5min(self):
         return """
         , user_data AS (
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'new_viewer_first_day_conversion'::text AS metric_name,
+            'conversion-5min'::text AS metric_name,
             'MAX'::text AS metric_collection_method, 
-            CASE WHEN tvt_sec > 10 THEN 1.0 ELSE 0.0 END AS metric_value
+            CASE WHEN (tvt_sec + linear_tvt_sec) > 60*5.0 THEN 1.0 ELSE 0.0 END AS metric_value
           FROM raw_user_data
-          WHERE ds >= DATE_TRUNC('day', device_first_seen_ts) AND ds < device_first_seen_ts + INTERVAL '1 day'
         )
         """
 
-    def new_user_1_to_8_days_retained(self):
+    def conversion_new_visitors(self):
         return """
         , user_data AS (
           SELECT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'new_user_1_to_8_days_retained'::text AS metric_name,
+            'conversion--new_visitors'::text AS metric_name,
             'MAX'::text AS metric_collection_method, 
-            CASE WHEN ds > device_first_seen_ts + INTERVAL '1 day' AND tvt_sec > 10 THEN 1.0 ELSE 0.0 END AS metric_value 
+            CASE WHEN (tvt_sec + linear_tvt_sec) > 10 THEN 1.0 ELSE 0.0 END AS metric_value
           FROM raw_user_data
-          WHERE ds >= DATE_TRUNC('day', device_first_seen_ts) AND ds < device_first_seen_ts + INTERVAL '8 day'
+          WHERE ds >= DATE_TRUNC('day',device_first_seen_ts) AND ds < device_first_seen_ts + INTERVAL '7 day'
+        )
+        """
+    
+    def conversion_5min_new_visitors(self):
+        return """
+        , user_data AS (
+          SELECT 
+            device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
+            'conversion-5min-new_visitors'::text AS metric_name,
+            'MAX'::text AS metric_collection_method, 
+            CASE WHEN (tvt_sec + linear_tvt_sec) > 60*5.0 THEN 1.0 ELSE 0.0 END AS metric_value
+          FROM raw_user_data
+          WHERE ds >= DATE_TRUNC('day',device_first_seen_ts) AND ds < device_first_seen_ts + INTERVAL '7 day'
         )
         """
 
-    def all_user_retained_in_experiment_timeframe(self):
+    def retention_new_viewers(self):
+        return """
+        , user_data AS (
+          SELECT 
+            device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
+            'retention--new_viewers'::text AS metric_name,
+            'MAX'::text AS metric_collection_method, 
+            CASE WHEN ds > device_first_view_ts + INTERVAL '1 day' AND (tvt_sec + linear_tvt_sec) > 10 THEN 1.0 ELSE 0.0 END AS metric_value
+          FROM raw_user_data
+          WHERE ds >= DATE_TRUNC('day',device_first_view_ts) AND ds < device_first_view_ts + INTERVAL '7 day'
+        )
+        """
+
+    def retention(self):
         return """
         , user_data AS (
           SELECT DISTINCT 
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
-            'all_user_retained_in_experiment_timeframe'::text AS metric_name,
+            'retention'::text AS metric_name,
             'SUMGREATERTHAN'::text AS metric_collection_method,
             1.0 AS metric_value
           FROM raw_user_data
-          WHERE tvt_sec > 10
+          WHERE (tvt_sec + linear_tvt_sec) > 10
         )
         """
 
@@ -187,14 +217,14 @@ class metric_switcher(object):
         )
 
         , device_data_impressions AS (
-            SELECT d.device_id,
-                   d.ds,
-                   d.platform_type,
-                   d.platform,
-                   d.device_first_seen_ts,
-                   d.first_exposure_ds,
-                   SUM(COALESCE(rev.ad_impression_total_count, 0))::float AS ad_impression_total_count,
-                   SUM(COALESCE(rev.gross_revenue, 0))::float AS gross_revenue
+            SELECT  d.device_id,
+                    d.ds,
+                    d.platform,
+                    d.platform_type,
+                    d.device_first_seen_ts,
+                    d.first_exposure_ds,
+                    COALESCE(SUM(rev.ad_impression_total_count), 0)::float AS ad_impression_total_count,
+                    SUM(rev.gross_revenue) AS gross_revenue
             FROM ad_impressions_data AS rev
               RIGHT JOIN raw_user_data AS d
                 ON d.device_id = rev.device_id
@@ -208,24 +238,29 @@ class metric_switcher(object):
             device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds, 
             'ad_impressions'::text AS metric_name,
             'SUM'::text AS metric_collection_method,
-            ad_impression_total_count AS metric_value
+             COALESCE(ad_impression_total_count,0)::float AS metric_value
           FROM device_data_impressions
         )
         """
     
-    # TODO: make the list of available metrics consistent with exp dash
-    # Primary experimentation dash metrics:
-#     primary = [
-#         'activations',
-#         'ad_impressions',
-#         'capped_linear_and_vod_tvt_hours_4_hr_per_day',
-#         'capped_tvt_hours_4_hr_per_day',
-#         'linear_and_vod_all_user_retained_in_experiment_timeframe',
-#         'linear_and_vod_viewer_conversion',
-#         'new_user_1_to_8_days_retained',
-#         'new_user_capped_first_day_tvt_hours_4_hr_per_day', 
-#         'new_viewer_first_day_conversion',
-#         'signups',
-#         'viewer_5_min_conversion',
-#         'visits'
-#     ]
+    def tvt_vod_series(self):
+        return """
+        , user_data AS (
+            SELECT device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds,
+                'tvt-vod_series'::text AS metric_name,
+                series_tvt_sec/3600.0 AS metric_value,
+                'SUM'::text AS metric_collection_method
+            FROM raw_user_data
+        )
+        """
+    
+    def tvt_vod_movie(self):
+        return """
+        , user_data AS (
+            SELECT device_id, ds, platform_type, platform, device_first_seen_ts, first_exposure_ds,
+                'tvt-vod_movie'::text AS metric_name,
+                movie_tvt_sec/3600.0 AS metric_value,
+                'SUM'::text AS metric_collection_method
+            FROM raw_user_data
+        )
+        """
